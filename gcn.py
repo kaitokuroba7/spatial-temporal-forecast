@@ -15,6 +15,7 @@ class PyGConv(nn.Module):
     """
     Choose GCN implemented by pytorch-geometric and apply to a batch of nodes.
     """
+
     def __init__(self, in_channels, out_channels, gcn_type, gcn_partition=None):
         """
         :param in_channels: Number of input features at each node.
@@ -32,7 +33,7 @@ class PyGConv(nn.Module):
         self.batch_training = False
         # Use partition to train on mini-batch of sub-graph
         self.gcn_partition = gcn_partition
-        self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
+        self.kwargs = {'in_channels': in_channels, 'out_channels': out_channels}
 
         if self.gcn_partition == 'cluster':
             self.gcn = PyGConv(in_channels, out_channels, gcn_type, gcn_partition=None)
@@ -51,19 +52,19 @@ class PyGConv(nn.Module):
                 self.kwargs['K'] = 3
             if gcn_type == 'sage':
                 self.kwargs['concat'] = True
-            
-            GCNCell = {'normal':PyG.GCNConv, 
-                        'cheb':PyG.ChebConv,
-                        'sage':PyG.SAGEConv, 
-                        'graph':PyG.GraphConv,
-                        'gat':PyG.GATConv,
-                        'sagela':SAGELANet,
-                        'gated':GatedGCNNet,
-                        'egnn':MyEGNNNet}\
-                        .get(gcn_type)
-            
+
+            GCNCell = {'normal': PyG.GCNConv,
+                       'cheb': PyG.ChebConv,
+                       'sage': PyG.SAGEConv,
+                       'graph': PyG.GraphConv,
+                       'gat': PyG.GATConv,
+                       'sagela': SAGELANet,
+                       'gated': GatedGCNNet,
+                       'egnn': MyEGNNNet} \
+                .get(gcn_type)
+
             self.gcn = GCNCell(**self.kwargs)
-    
+
     def get_batch(self, X):
         # Wrap input node and edge features, along with the single edge_index, into a `torch_geometric.data.Batch` instance
         data_list = [Data(x=x) for x in X]
@@ -81,15 +82,15 @@ class PyGConv(nn.Module):
             sz = X.shape
         if self.gcn_partition == 'cluster':
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
-            graph_data = Data(edge_index=edge_index, edge_attr=edge_weight, 
-                                train_mask=torch.arange(0, sz[1]), num_nodes=sz[1]).to('cpu')
+            graph_data = Data(edge_index=edge_index, edge_attr=edge_weight,
+                              train_mask=torch.arange(0, sz[1]), num_nodes=sz[1]).to('cpu')
             cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir='./data/cluster')
             loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=0)
 
             for subgraph in loader:
-                out[:, subgraph.train_mask] = self.gcn(X[:, subgraph.train_mask], 
-                                                subgraph.edge_index.to(X.device), 
-                                                subgraph.edge_attr.to(X.device))
+                out[:, subgraph.train_mask] = self.gcn(X[:, subgraph.train_mask],
+                                                       subgraph.edge_index.to(X.device),
+                                                       subgraph.edge_attr.to(X.device))
 
         elif self.gcn_partition == 'sample':
             # Use NeighborSampler() to iterates over graph nodes in a mini-batch fashion 
@@ -97,7 +98,7 @@ class PyGConv(nn.Module):
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, num_nodes=sz[1]).to('cpu')
             loader = NeighborSampler(graph_data, size=[10, 5], num_hops=2, batch_size=120,
-                         shuffle=True, add_self_loops=False)
+                                     shuffle=True, add_self_loops=False)
 
             for data_flow in loader():
                 block1 = data_flow[0]
@@ -122,7 +123,7 @@ class PyGConv(nn.Module):
             else:
                 out = self.gcn(batch.x, edge_index)
             out = out.view(sz[0], sz[1], -1)
-        
+
         return out
 
 
@@ -130,6 +131,7 @@ class GCNUnit(nn.Module):
     """
     Choose GCNUnit with package and type.
     """
+
     def __init__(self, in_channels, out_channels, gcn_type, gcn_package, gcn_partition=None):
         """
         :param in_channels: Number of input features at each node.
@@ -142,20 +144,20 @@ class GCNUnit(nn.Module):
         self.adj_type = 'sparse'
         if gcn_package == 'pyg':
             self.gcn = PyGConv(in_channels=in_channels,
-                                out_channels=out_channels,
-                                gcn_type=gcn_type,
-                                gcn_partition=gcn_partition)
+                               out_channels=out_channels,
+                               gcn_type=gcn_type,
+                               gcn_partition=gcn_partition)
         else:
             assert gcn_type in ['normal', 'cheb', 'sage', 'gat', 'egnn', 'sagela']
             self.adj_type = 'dense'
-            GCNCell = {'normal':ours.GCNConv, 
-                        'cheb':ours.ChebConv, 
-                        'sage':ours.SAGEConv, 
-                        'gat':ours.GATConv,
-                        'egnn':EGNN,
-                        'sagela':SAGELA}.get(gcn_type)
+            GCNCell = {'normal': ours.GCNConv,
+                       'cheb': ours.ChebConv,
+                       'sage': ours.SAGEConv,
+                       'gat': ours.GATConv,
+                       'egnn': EGNN,
+                       'sagela': SAGELA}.get(gcn_type)
             self.gcn = GCNCell(in_channels=in_channels,
-                                out_channels=out_channels)
+                               out_channels=out_channels)
 
     def forward(self, X, A=None, edge_index=None, edge_weight=None):
         """
@@ -167,5 +169,5 @@ class GCNUnit(nn.Module):
             out = self.gcn(X, edge_index=edge_index, edge_weight=edge_weight)
         else:
             out = self.gcn(X, A=A)
-        
+
         return out
